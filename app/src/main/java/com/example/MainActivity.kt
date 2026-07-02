@@ -17,6 +17,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AddCard
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Assessment
 import androidx.compose.material.icons.filled.Calculate
 import androidx.compose.material.icons.filled.Dashboard
 import androidx.compose.material.icons.filled.DarkMode
@@ -53,6 +54,7 @@ import com.example.ui.FarmDataEntryScreen
 import com.example.ui.FeedPlannerScreen
 import com.example.ui.KandangScreen
 import com.example.ui.HealthScreen
+import com.example.ui.ReportsScreen
 import com.example.ui.SyncScreen
 import com.example.ui.FarmViewModel
 import com.example.ui.theme.MyApplicationTheme
@@ -174,31 +176,43 @@ fun MainLayout(viewModel: FarmViewModel = viewModel()) {
                         selected = selectedTab == 0,
                         onClick = { selectedTab = 0 },
                         icon = { Icon(Icons.Default.Dashboard, contentDescription = "Dashboard") },
-                        label = { Text("Dashboard") }
+                        label = { Text("Dashboard") },
+                        alwaysShowLabel = false
                     )
                     NavigationBarItem(
                         selected = selectedTab == 1,
                         onClick = { selectedTab = 1 },
                         icon = { Icon(Icons.Default.AddCard, contentDescription = "Catat Data") },
-                        label = { Text("Catat Data") }
+                        label = { Text("Catat Data") },
+                        alwaysShowLabel = false
                     )
                     NavigationBarItem(
                         selected = selectedTab == 2,
                         onClick = { selectedTab = 2 },
                         icon = { Icon(Icons.Default.Home, contentDescription = "Kandang") },
-                        label = { Text("Kandang") }
+                        label = { Text("Kandang") },
+                        alwaysShowLabel = false
                     )
                     NavigationBarItem(
                         selected = selectedTab == 3,
                         onClick = { selectedTab = 3 },
                         icon = { Icon(Icons.Default.Favorite, contentDescription = "Kesehatan") },
-                        label = { Text("Kesehatan") }
+                        label = { Text("Kesehatan") },
+                        alwaysShowLabel = false
                     )
                     NavigationBarItem(
                         selected = selectedTab == 4,
                         onClick = { selectedTab = 4 },
                         icon = { Icon(Icons.Default.Calculate, contentDescription = "Simulasi") },
-                        label = { Text("Simulasi") }
+                        label = { Text("Simulasi") },
+                        alwaysShowLabel = false
+                    )
+                    NavigationBarItem(
+                        selected = selectedTab == 5,
+                        onClick = { selectedTab = 5 },
+                        icon = { Icon(Icons.Default.Assessment, contentDescription = "Laporan") },
+                        label = { Text("Laporan") },
+                        alwaysShowLabel = false
                     )
                 }
             }
@@ -288,6 +302,14 @@ fun MainLayout(viewModel: FarmViewModel = viewModel()) {
                     4 -> FeedPlannerScreen(
                         eggPrice = eggPrice,
                         feedPrice = feedPrice,
+                        onUpdateEggPrice = { viewModel.updateEggPrice(it) },
+                        onUpdateFeedPrice = { viewModel.updateFeedPrice(it) }
+                    )
+                    5 -> ReportsScreen(
+                        logs = logs,
+                        eggPrice = eggPrice,
+                        feedPrice = feedPrice,
+                        kandangPopulations = kandangPopulations,
                         onUpdateEggPrice = { viewModel.updateEggPrice(it) },
                         onUpdateFeedPrice = { viewModel.updateFeedPrice(it) }
                     )

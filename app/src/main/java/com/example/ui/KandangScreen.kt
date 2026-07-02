@@ -202,340 +202,33 @@ fun KandangScreen(
                     val cagePercentage = if (totalFlock > 0) (currentPop.toFloat() / totalFlock) * 100 else 0f
                     val isExpanded = expandedCages.contains(cage)
 
-                    // Calculate cage specific statistics
-                    val cageLogs = remember(logs, cage) {
-                        logs.filter { it.kandangName == cage }
-                    }
-                    val totalEggs = cageLogs.sumOf { it.eggCount }
-                    val totalEggWeight = cageLogs.sumOf { it.eggWeight.toDouble() }.toFloat()
-                    val totalFeed = cageLogs.sumOf { it.feedAmount.toDouble() }.toFloat()
-                    val totalDead = cageLogs.sumOf { it.chickenDead }
-                    val activeDays = cageLogs.map { it.date }.distinct().size.coerceAtLeast(1)
-
-                    val fcr = if (totalEggWeight > 0f) totalFeed / totalEggWeight else 0f
-                    val hdp = if (currentPop > 0) (totalEggs.toFloat() / (currentPop * activeDays)) * 100f else 0f
-
-                    Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .animateContentSize()
-                            .testTag("kandang_card_${cage.replace(" ", "_")}"),
-                        colors = CardDefaults.cardColors(
-                            containerColor = if (isExpanded) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.15f)
-                            else MaterialTheme.colorScheme.surface
-                        ),
-                        shape = RoundedCornerShape(16.dp),
-                        border = BorderStroke(
-                            width = 1.dp,
-                            color = if (isExpanded) MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
-                            else MaterialTheme.colorScheme.outlineVariant
-                        )
-                    ) {
-                        Column(modifier = Modifier.padding(16.dp)) {
-                            // Header Row (Clickable to Expand)
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable {
-                                        expandedCages = if (isExpanded) {
-                                            expandedCages - cage
-                                        } else {
-                                            expandedCages + cage
-                                        }
-                                    },
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Text(
-                                            text = cage,
-                                            style = MaterialTheme.typography.titleMedium,
-                                            fontWeight = FontWeight.Bold,
-                                            color = MaterialTheme.colorScheme.onSurface
-                                        )
-                                        Spacer(modifier = Modifier.width(8.dp))
-                                        IconButton(
-                                            onClick = {
-                                                renameDialogInputText = cage
-                                                showRenameDialogForKandang = cage
-                                            },
-                                            modifier = Modifier.size(24.dp)
-                                        ) {
-                                            Icon(
-                                                imageVector = Icons.Default.Edit,
-                                                contentDescription = "Rename cage",
-                                                tint = MaterialTheme.colorScheme.primary,
-                                                modifier = Modifier.size(14.dp)
-                                            )
-                                        }
-                                    }
-                                    Text(
-                                        text = "Populasi: $currentPop ekor • Kontribusi: ${String.format(Locale.US, "%.1f", cagePercentage)}%",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    IconButton(
-                                        onClick = {
-                                            showDeleteConfirmForKandang = cage
-                                        },
-                                        modifier = Modifier.size(36.dp)
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.Delete,
-                                            contentDescription = "Delete cage",
-                                            tint = MaterialTheme.colorScheme.error.copy(alpha = 0.8f),
-                                            modifier = Modifier.size(20.dp)
-                                        )
-                                    }
-                                    Icon(
-                                        imageVector = if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                                        contentDescription = "Expand details",
-                                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
+                    CageItemCard(
+                        cage = cage,
+                        currentPop = currentPop,
+                        cagePercentage = cagePercentage,
+                        isExpanded = isExpanded,
+                        totalFlock = totalFlock,
+                        logs = logs,
+                        onToggleExpand = {
+                            expandedCages = if (isExpanded) {
+                                expandedCages - cage
+                            } else {
+                                expandedCages + cage
                             }
-
-                            Spacer(modifier = Modifier.height(12.dp))
-
-                            // Quick adjustment stepper (always visible, easy to use!)
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                    Button(
-                                        onClick = { onUpdatePopulation(cage, (currentPop - 50).coerceAtLeast(0)) },
-                                        colors = ButtonDefaults.buttonColors(
-                                            containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                                            contentColor = MaterialTheme.colorScheme.onSurfaceVariant
-                                        ),
-                                        shape = RoundedCornerShape(8.dp),
-                                        modifier = Modifier.height(36.dp),
-                                        contentPadding = PaddingValues(horizontal = 10.dp)
-                                    ) {
-                                        Text("-50", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                                    }
-                                    Button(
-                                        onClick = { onUpdatePopulation(cage, (currentPop - 10).coerceAtLeast(0)) },
-                                        colors = ButtonDefaults.buttonColors(
-                                            containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                                            contentColor = MaterialTheme.colorScheme.onSurfaceVariant
-                                        ),
-                                        shape = RoundedCornerShape(8.dp),
-                                        modifier = Modifier.height(36.dp),
-                                        contentPadding = PaddingValues(horizontal = 10.dp)
-                                    ) {
-                                        Text("-10", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                                    }
-                                }
-
-                                Box(
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(8.dp))
-                                        .background(MaterialTheme.colorScheme.primaryContainer)
-                                        .clickable {
-                                            popDialogInputText = currentPop.toString()
-                                            showPopDialogForKandang = cage
-                                        }
-                                        .padding(horizontal = 14.dp, vertical = 6.dp),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text(
-                                        text = "$currentPop ekor",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        fontWeight = FontWeight.Black,
-                                        color = MaterialTheme.colorScheme.onPrimaryContainer
-                                    )
-                                }
-
-                                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                    Button(
-                                        onClick = { onUpdatePopulation(cage, currentPop + 10) },
-                                        colors = ButtonDefaults.buttonColors(
-                                            containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                                            contentColor = MaterialTheme.colorScheme.onSurfaceVariant
-                                        ),
-                                        shape = RoundedCornerShape(8.dp),
-                                        modifier = Modifier.height(36.dp),
-                                        contentPadding = PaddingValues(horizontal = 10.dp)
-                                    ) {
-                                        Text("+10", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                                    }
-                                    Button(
-                                        onClick = { onUpdatePopulation(cage, currentPop + 50) },
-                                        colors = ButtonDefaults.buttonColors(
-                                            containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                                            contentColor = MaterialTheme.colorScheme.onSurfaceVariant
-                                        ),
-                                        shape = RoundedCornerShape(8.dp),
-                                        modifier = Modifier.height(36.dp),
-                                        contentPadding = PaddingValues(horizontal = 10.dp)
-                                    ) {
-                                        Text("+50", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                                    }
-                                }
-                            }
-
-                            // Expandable statistics details
-                            AnimatedVisibility(visible = isExpanded) {
-                                Column(modifier = Modifier.padding(top = 16.dp)) {
-                                    Divider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-                                    Spacer(modifier = Modifier.height(12.dp))
-
-                                    Text(
-                                        text = "STATISTIK PRODUKTIVITAS",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.primary
-                                    )
-
-                                    Spacer(modifier = Modifier.height(8.dp))
-
-                                    // Metrics Grid
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                    ) {
-                                        // HDP
-                                        Card(
-                                            modifier = Modifier.weight(1f),
-                                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)),
-                                            shape = RoundedCornerShape(10.dp)
-                                        ) {
-                                            Column(modifier = Modifier.padding(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                                                Text("HDP Rata-rata", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                                Text(
-                                                    text = if (hdp > 0f) String.format(Locale.US, "%.1f%%", hdp) else "-",
-                                                    style = MaterialTheme.typography.bodyLarge,
-                                                    fontWeight = FontWeight.Bold,
-                                                    color = if (hdp >= 85f) Color(0xFF1B5E20) else MaterialTheme.colorScheme.onSurface
-                                                )
-                                            }
-                                        }
-
-                                        // FCR
-                                        Card(
-                                            modifier = Modifier.weight(1f),
-                                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)),
-                                            shape = RoundedCornerShape(10.dp)
-                                        ) {
-                                            Column(modifier = Modifier.padding(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                                                Text("FCR Rata-rata", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                                Text(
-                                                    text = if (fcr > 0f) String.format(Locale.US, "%.2f", fcr) else "-",
-                                                    style = MaterialTheme.typography.bodyLarge,
-                                                    fontWeight = FontWeight.Bold,
-                                                    color = if (fcr > 0f && fcr <= 2.3f) Color(0xFF1B5E20) else MaterialTheme.colorScheme.onSurface
-                                                )
-                                            }
-                                        }
-                                    }
-
-                                    Spacer(modifier = Modifier.height(8.dp))
-
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                    ) {
-                                        // Total Eggs
-                                        Card(
-                                            modifier = Modifier.weight(1f),
-                                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)),
-                                            shape = RoundedCornerShape(10.dp)
-                                        ) {
-                                            Column(modifier = Modifier.padding(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                                                Text("Kumulatif Telur", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                                Text("$totalEggs btr", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold)
-                                            }
-                                        }
-
-                                        // Total Dead
-                                        Card(
-                                            modifier = Modifier.weight(1f),
-                                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)),
-                                            shape = RoundedCornerShape(10.dp)
-                                        ) {
-                                            Column(modifier = Modifier.padding(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                                                Text("Total Kematian", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                                Text(
-                                                    text = "$totalDead ekor",
-                                                    style = MaterialTheme.typography.bodyLarge,
-                                                    fontWeight = FontWeight.Bold,
-                                                    color = if (totalDead > 0) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
-                                                )
-                                            }
-                                        }
-                                    }
-
-                                    Spacer(modifier = Modifier.height(16.dp))
-
-                                    // Recent Logs Section
-                                    Text(
-                                        text = "LOG TERBARU KANDANG",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.primary
-                                    )
-
-                                    Spacer(modifier = Modifier.height(8.dp))
-
-                                    if (cageLogs.isEmpty()) {
-                                        Text(
-                                            text = "Belum ada pencatatan data log untuk kandang ini.",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                                            modifier = Modifier.padding(vertical = 4.dp)
-                                        )
-                                    } else {
-                                        cageLogs.take(3).forEach { log ->
-                                            Card(
-                                                modifier = Modifier
-                                                    .fillMaxWidth()
-                                                    .padding(vertical = 4.dp),
-                                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                                                border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-                                            ) {
-                                                Row(
-                                                    modifier = Modifier.padding(10.dp),
-                                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                                    verticalAlignment = Alignment.CenterVertically
-                                                ) {
-                                                    Column {
-                                                        Text(text = log.date, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
-                                                        Text(
-                                                            text = "🥚 ${log.eggCount} btr (${log.eggWeight}kg) • 🌾 ${log.feedAmount}kg",
-                                                            style = MaterialTheme.typography.bodySmall,
-                                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                                        )
-                                                    }
-                                                    if (log.chickenDead > 0) {
-                                                        Box(
-                                                            modifier = Modifier
-                                                                .clip(RoundedCornerShape(4.dp))
-                                                                .background(MaterialTheme.colorScheme.errorContainer)
-                                                                .padding(horizontal = 6.dp, vertical = 2.dp)
-                                                        ) {
-                                                            Text(
-                                                                text = "☠️ ${log.chickenDead} mati",
-                                                                style = MaterialTheme.typography.labelSmall,
-                                                                color = MaterialTheme.colorScheme.onErrorContainer,
-                                                                fontWeight = FontWeight.Bold
-                                                            )
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
+                        },
+                        onRenameClick = {
+                            renameDialogInputText = cage
+                            showRenameDialogForKandang = cage
+                        },
+                        onDeleteClick = {
+                            showDeleteConfirmForKandang = cage
+                        },
+                        onAdjustPopulationClick = {
+                            popDialogInputText = currentPop.toString()
+                            showPopDialogForKandang = cage
+                        },
+                        onUpdatePopulation = onUpdatePopulation
+                    )
                 }
             }
         }
@@ -727,6 +420,488 @@ fun KandangScreen(
                     }
                 }
             )
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun CageItemCard(
+    cage: String,
+    currentPop: Int,
+    cagePercentage: Float,
+    isExpanded: Boolean,
+    totalFlock: Int,
+    logs: List<LayerFarmLog>,
+    onToggleExpand: () -> Unit,
+    onRenameClick: () -> Unit,
+    onDeleteClick: () -> Unit,
+    onAdjustPopulationClick: () -> Unit,
+    onUpdatePopulation: (String, Int) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    // Calculate cage specific statistics
+    val cageLogs = remember(logs, cage) {
+        logs.filter { it.kandangName == cage }.sortedByDescending { it.date }
+    }
+    val totalEggs = cageLogs.sumOf { it.eggCount }
+    val totalEggWeight = cageLogs.sumOf { it.eggWeight.toDouble() }.toFloat()
+    val totalFeed = cageLogs.sumOf { it.feedAmount.toDouble() }.toFloat()
+    val totalDead = cageLogs.sumOf { it.chickenDead }
+    val activeDays = cageLogs.map { it.date }.distinct().size.coerceAtLeast(1)
+
+    val fcr = if (totalEggWeight > 0f) totalFeed / totalEggWeight else 0f
+    val hdp = if (currentPop > 0) (totalEggs.toFloat() / (currentPop * activeDays)) * 100f else 0f
+
+    // Search and Pagination States
+    var searchQuery by remember { mutableStateOf("") }
+    var currentPage by remember { mutableStateOf(0) }
+
+    // Reset pagination on search change
+    LaunchedEffect(searchQuery) {
+        currentPage = 0
+    }
+
+    val filteredLogs = remember(cageLogs, searchQuery) {
+        if (searchQuery.isBlank()) {
+            cageLogs
+        } else {
+            cageLogs.filter { log ->
+                log.date.contains(searchQuery, ignoreCase = true) ||
+                log.notes.contains(searchQuery, ignoreCase = true)
+            }
+        }
+    }
+
+    val pageSize = 4
+    val totalPages = remember(filteredLogs) {
+        (filteredLogs.size + pageSize - 1) / pageSize
+    }
+    val currentPageClamped = remember(currentPage, totalPages) {
+        if (totalPages > 0) currentPage.coerceIn(0, totalPages - 1) else 0
+    }
+    val paginatedLogs = remember(filteredLogs, currentPageClamped) {
+        filteredLogs.drop(currentPageClamped * pageSize).take(pageSize)
+    }
+
+    Card(
+        modifier = modifier
+            .fillMaxWidth()
+            .animateContentSize()
+            .testTag("kandang_card_${cage.replace(" ", "_")}"),
+        colors = CardDefaults.cardColors(
+            containerColor = if (isExpanded) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.15f)
+            else MaterialTheme.colorScheme.surface
+        ),
+        shape = RoundedCornerShape(16.dp),
+        border = BorderStroke(
+            width = 1.dp,
+            color = if (isExpanded) MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
+            else MaterialTheme.colorScheme.outlineVariant
+        )
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            // Header Row (Clickable to Expand)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onToggleExpand() },
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = cage,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        IconButton(
+                            onClick = onRenameClick,
+                            modifier = Modifier.size(24.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Edit,
+                                contentDescription = "Rename cage",
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(14.dp)
+                            )
+                        }
+                    }
+                    Text(
+                        text = "Populasi: $currentPop ekor • Kontribusi: ${String.format(Locale.US, "%.1f", cagePercentage)}%",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(
+                        onClick = onDeleteClick,
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Delete,
+                            contentDescription = "Delete cage",
+                            tint = MaterialTheme.colorScheme.error.copy(alpha = 0.8f),
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                    Icon(
+                        imageVector = if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                        contentDescription = "Expand details",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Quick adjustment stepper (always visible, easy to use!)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Button(
+                        onClick = { onUpdatePopulation(cage, (currentPop - 50).coerceAtLeast(0)) },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                            contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                        ),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.height(36.dp),
+                        contentPadding = PaddingValues(horizontal = 10.dp)
+                    ) {
+                        Text("-50", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
+                    Button(
+                        onClick = { onUpdatePopulation(cage, (currentPop - 10).coerceAtLeast(0)) },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                            contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                        ),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.height(36.dp),
+                        contentPadding = PaddingValues(horizontal = 10.dp)
+                    ) {
+                        Text("-10", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(MaterialTheme.colorScheme.primaryContainer)
+                        .clickable { onAdjustPopulationClick() }
+                        .padding(horizontal = 14.dp, vertical = 6.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "$currentPop ekor",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Black,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                }
+
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Button(
+                        onClick = { onUpdatePopulation(cage, currentPop + 10) },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                            contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                        ),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.height(36.dp),
+                        contentPadding = PaddingValues(horizontal = 10.dp)
+                    ) {
+                        Text("+10", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
+                    Button(
+                        onClick = { onUpdatePopulation(cage, currentPop + 50) },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                            contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                        ),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.height(36.dp),
+                        contentPadding = PaddingValues(horizontal = 10.dp)
+                    ) {
+                        Text("+50", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+
+            // Expandable statistics details
+            AnimatedVisibility(visible = isExpanded) {
+                Column(modifier = Modifier.padding(top = 16.dp)) {
+                    Divider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Text(
+                        text = "STATISTIK PRODUKTIVITAS",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    // Metrics Grid
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        // HDP
+                        Card(
+                            modifier = Modifier.weight(1f),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)),
+                            shape = RoundedCornerShape(10.dp)
+                        ) {
+                            Column(modifier = Modifier.padding(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text("HDP Rata-rata", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text(
+                                    text = if (hdp > 0f) String.format(Locale.US, "%.1f%%", hdp) else "-",
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (hdp >= 85f) Color(0xFF1B5E20) else MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+                        }
+
+                        // FCR
+                        Card(
+                            modifier = Modifier.weight(1f),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)),
+                            shape = RoundedCornerShape(10.dp)
+                        ) {
+                            Column(modifier = Modifier.padding(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text("FCR Rata-rata", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text(
+                                    text = if (fcr > 0f) String.format(Locale.US, "%.2f", fcr) else "-",
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (fcr > 0f && fcr <= 2.3f) Color(0xFF1B5E20) else MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        // Total Eggs
+                        Card(
+                            modifier = Modifier.weight(1f),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)),
+                            shape = RoundedCornerShape(10.dp)
+                        ) {
+                            Column(modifier = Modifier.padding(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text("Kumulatif Telur", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text("$totalEggs btr", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold)
+                            }
+                        }
+
+                        // Total Dead
+                        Card(
+                            modifier = Modifier.weight(1f),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)),
+                            shape = RoundedCornerShape(10.dp)
+                        ) {
+                            Column(modifier = Modifier.padding(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text("Total Kematian", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text(
+                                    text = "$totalDead ekor",
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (totalDead > 0) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // Header for Log Section & Search
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "RIWAYAT & LOG KANDANG",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        if (cageLogs.isNotEmpty()) {
+                            Text(
+                                text = "${filteredLogs.size} data",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    if (cageLogs.isEmpty()) {
+                        Text(
+                            text = "Belum ada pencatatan data log untuk kandang ini.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                            modifier = Modifier.padding(vertical = 4.dp)
+                        )
+                    } else {
+                        // Search Input Field
+                        OutlinedTextField(
+                            value = searchQuery,
+                            onValueChange = { searchQuery = it },
+                            placeholder = { Text("Cari berdasarkan tgl atau catatan...", fontSize = 12.sp) },
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = Icons.Default.Search,
+                                    contentDescription = "Search",
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            },
+                            trailingIcon = {
+                                if (searchQuery.isNotEmpty()) {
+                                    IconButton(onClick = { searchQuery = "" }) {
+                                        Icon(
+                                            imageVector = Icons.Default.Clear,
+                                            contentDescription = "Clear",
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                    }
+                                }
+                            },
+                            singleLine = true,
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedContainerColor = MaterialTheme.colorScheme.surface,
+                                unfocusedContainerColor = MaterialTheme.colorScheme.surface,
+                                focusedBorderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f),
+                                unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                            ),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = 8.dp)
+                        )
+
+                        if (filteredLogs.isEmpty()) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 12.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = "Tidak ada riwayat log yang sesuai kata kunci.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                                )
+                            }
+                        } else {
+                            // Render Paginated Logs
+                            paginatedLogs.forEach { log ->
+                                Card(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 4.dp),
+                                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                                    border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                                ) {
+                                    Column(modifier = Modifier.padding(10.dp)) {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Column {
+                                                Text(text = log.date, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                                                Text(
+                                                    text = "🥚 ${log.eggCount} btr (${log.eggWeight}kg) • 🌾 ${log.feedAmount}kg",
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                            }
+                                            if (log.chickenDead > 0) {
+                                                Box(
+                                                    modifier = Modifier
+                                                        .clip(RoundedCornerShape(4.dp))
+                                                        .background(MaterialTheme.colorScheme.errorContainer)
+                                                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                                                ) {
+                                                    Text(
+                                                        text = "☠️ ${log.chickenDead} mati",
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        color = MaterialTheme.colorScheme.onErrorContainer,
+                                                        fontWeight = FontWeight.Bold
+                                                    )
+                                                }
+                                            }
+                                        }
+                                        if (log.notes.isNotBlank()) {
+                                            Spacer(modifier = Modifier.height(4.dp))
+                                            Text(
+                                                text = "Memo: ${log.notes}",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+
+                            // Pagination Controls UI
+                            if (totalPages > 1) {
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    IconButton(
+                                        onClick = { if (currentPageClamped > 0) currentPage = currentPageClamped - 1 },
+                                        enabled = currentPageClamped > 0
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.KeyboardArrowLeft,
+                                            contentDescription = "Halaman Sebelumnya",
+                                            tint = if (currentPageClamped > 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
+                                        )
+                                    }
+
+                                    Text(
+                                        text = "Halaman ${currentPageClamped + 1} dari $totalPages",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+
+                                    IconButton(
+                                        onClick = { if (currentPageClamped < totalPages - 1) currentPage = currentPageClamped + 1 },
+                                        enabled = currentPageClamped < totalPages - 1
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.KeyboardArrowRight,
+                                            contentDescription = "Halaman Selanjutnya",
+                                            tint = if (currentPageClamped < totalPages - 1) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 }
