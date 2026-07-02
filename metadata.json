@@ -1,0 +1,6 @@
+{
+  "name": "Ternak Layer",
+  "description": "A robust offline-first mobile app for managing layer chicken farms with local persistence and background sync.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
