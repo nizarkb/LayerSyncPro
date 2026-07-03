@@ -25,6 +25,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.LayerFarmLog
+import com.example.data.BiosecurityCheck
+import com.example.data.VaccinationSchedule
+import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -36,8 +39,18 @@ fun KandangScreen(
     onDeleteKandang: (String) -> Unit,
     onRenameKandang: (String, String) -> Unit,
     logs: List<LayerFarmLog>,
+    vaccinations: List<VaccinationSchedule>,
+    biosecurityChecks: List<BiosecurityCheck>,
+    onAddVaccination: (kandang: String, name: String, date: String, method: String, notes: String) -> Unit,
+    onUpdateVaccinationStatus: (id: String, completed: Boolean, actualDate: String?) -> Unit,
+    onDeleteVaccination: (id: String) -> Unit,
+    onSaveBiosecurityCheck: (BiosecurityCheck) -> Unit,
+    onDeleteBiosecurityCheck: (id: String) -> Unit,
+    onSeedDefaultProgram: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    var selectedTabState by remember { mutableStateOf(0) } // 0 = Kandang, 1 = Vaksinasi, 2 = Biosekuriti
+
     var showAddDialog by remember { mutableStateOf(false) }
     var addNameInputText by remember { mutableStateOf("") }
     var addPopInputText by remember { mutableStateOf("500") }
@@ -60,174 +73,264 @@ fun KandangScreen(
         modifier = modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
-            .padding(horizontal = 16.dp)
     ) {
-        // Upper decorative hero header
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 12.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
-            shape = RoundedCornerShape(16.dp)
-        ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(48.dp)
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(MaterialTheme.colorScheme.primary),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Layers,
-                            contentDescription = "Layer Coop",
-                            tint = MaterialTheme.colorScheme.onPrimary,
-                            modifier = Modifier.size(24.dp)
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.width(16.dp))
-
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = "Total Populasi Layer",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
-                        )
-                        Text(
-                            text = "$totalFlock ekor",
-                            style = MaterialTheme.typography.headlineMedium,
-                            fontWeight = FontWeight.Black,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer
-                        )
-                    }
-
-                    Button(
-                        onClick = { showAddDialog = true },
-                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
-                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
-                        shape = RoundedCornerShape(10.dp)
-                    ) {
-                        Icon(Icons.Default.Add, contentDescription = "Tambah Kandang", modifier = Modifier.size(18.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("Kandang", fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(8.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    Column {
-                        Text(
-                            text = "Kandang Aktif",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.6f)
-                        )
-                        Text(
-                            text = "${activeCages.size} Unit",
-                            style = MaterialTheme.typography.bodyLarge,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer
-                        )
-                    }
-                    Column {
-                        Text(
-                            text = "Total Produksi",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.6f)
-                        )
-                        Text(
-                            text = "${logs.sumOf { it.eggCount }} btr",
-                            style = MaterialTheme.typography.bodyLarge,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer
-                        )
-                    }
-                }
+        // Tab Selector Row
+        TabRow(
+            selectedTabIndex = selectedTabState,
+            containerColor = MaterialTheme.colorScheme.surface,
+            contentColor = MaterialTheme.colorScheme.primary,
+            indicator = { tabPositions ->
+                TabRowDefaults.SecondaryIndicator(
+                    modifier = Modifier.tabIndicatorOffset(tabPositions[selectedTabState]),
+                    color = MaterialTheme.colorScheme.primary
+                )
             }
+        ) {
+            Tab(
+                selected = selectedTabState == 0,
+                onClick = { selectedTabState = 0 },
+                text = {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.Home,
+                            contentDescription = "Kandang",
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Kandang", fontWeight = FontWeight.Bold)
+                    }
+                },
+                modifier = Modifier.testTag("kandang_tab_cages")
+            )
+            Tab(
+                selected = selectedTabState == 1,
+                onClick = { selectedTabState = 1 },
+                text = {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.Vaccines,
+                            contentDescription = "Vaksin",
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Vaksinasi", fontWeight = FontWeight.Bold)
+                    }
+                },
+                modifier = Modifier.testTag("kandang_tab_vaccines")
+            )
+            Tab(
+                selected = selectedTabState == 2,
+                onClick = { selectedTabState = 2 },
+                text = {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.Shield,
+                            contentDescription = "Biosekuriti",
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Biosekuriti", fontWeight = FontWeight.Bold)
+                    }
+                },
+                modifier = Modifier.testTag("kandang_tab_biosecurity")
+            )
         }
 
-        // Empty state
-        if (activeCages.isEmpty()) {
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth(),
-                contentAlignment = Alignment.Center
-            ) {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    modifier = Modifier.padding(24.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Info,
-                        contentDescription = "Empty",
-                        modifier = Modifier.size(64.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
-                    )
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text(
-                        text = "Belum Ada Kandang",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Text(
-                        text = "Silakan klik tombol di kanan atas untuk membuat kandang baru pertama Anda.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.padding(top = 4.dp, bottom = 16.dp)
-                    )
-                    Button(onClick = { showAddDialog = true }) {
-                        Text("Tambah Kandang Baru")
+        Box(modifier = Modifier.weight(1f)) {
+            when (selectedTabState) {
+                0 -> {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(horizontal = 16.dp)
+                    ) {
+                        // Upper decorative hero header
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 12.dp),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+                            shape = RoundedCornerShape(16.dp)
+                        ) {
+                            Column(modifier = Modifier.padding(16.dp)) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(48.dp)
+                                            .clip(RoundedCornerShape(12.dp))
+                                            .background(MaterialTheme.colorScheme.primary),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Layers,
+                                            contentDescription = "Layer Coop",
+                                            tint = MaterialTheme.colorScheme.onPrimary,
+                                            modifier = Modifier.size(24.dp)
+                                        )
+                                    }
+
+                                    Spacer(modifier = Modifier.width(16.dp))
+
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = "Total Populasi Layer",
+                                            style = MaterialTheme.typography.labelMedium,
+                                            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+                                        )
+                                        Text(
+                                            text = "$totalFlock ekor",
+                                            style = MaterialTheme.typography.headlineMedium,
+                                            fontWeight = FontWeight.Black,
+                                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                                        )
+                                    }
+
+                                    Button(
+                                        onClick = { showAddDialog = true },
+                                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                                        shape = RoundedCornerShape(10.dp)
+                                    ) {
+                                        Icon(Icons.Default.Add, contentDescription = "Tambah Kandang", modifier = Modifier.size(18.dp))
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text("Kandang", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                                ) {
+                                    Column {
+                                        Text(
+                                            text = "Kandang Aktif",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.6f)
+                                        )
+                                        Text(
+                                            text = "${activeCages.size} Unit",
+                                            style = MaterialTheme.typography.bodyLarge,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                                        )
+                                    }
+                                    Column {
+                                        Text(
+                                            text = "Total Produksi",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.6f)
+                                        )
+                                        Text(
+                                            text = "${logs.sumOf { it.eggCount }} btr",
+                                            style = MaterialTheme.typography.bodyLarge,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        // Empty state
+                        if (activeCages.isEmpty()) {
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxWidth(),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    modifier = Modifier.padding(24.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Info,
+                                        contentDescription = "Empty",
+                                        modifier = Modifier.size(64.dp),
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+                                    )
+                                    Spacer(modifier = Modifier.height(16.dp))
+                                    Text(
+                                        text = "Belum Ada Kandang",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Text(
+                                        text = "Silakan klik tombol di kanan atas untuk membuat kandang baru pertama Anda.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                        textAlign = TextAlign.Center,
+                                        modifier = Modifier.padding(top = 4.dp, bottom = 16.dp)
+                                    )
+                                    Button(onClick = { showAddDialog = true }) {
+                                        Text("Tambah Kandang Baru")
+                                    }
+                                }
+                            }
+                        } else {
+                            // List of Coops
+                            LazyColumn(
+                                modifier = Modifier.weight(1f),
+                                verticalArrangement = Arrangement.spacedBy(12.dp),
+                                contentPadding = PaddingValues(bottom = 24.dp)
+                            ) {
+                                items(activeCages, key = { it }) { cage ->
+                                    val currentPop = kandangPopulations[cage] ?: 0
+                                    val cagePercentage = if (totalFlock > 0) (currentPop.toFloat() / totalFlock) * 100 else 0f
+                                    val isExpanded = expandedCages.contains(cage)
+
+                                    CageItemCard(
+                                        cage = cage,
+                                        currentPop = currentPop,
+                                        cagePercentage = cagePercentage,
+                                        isExpanded = isExpanded,
+                                        totalFlock = totalFlock,
+                                        logs = logs,
+                                        onToggleExpand = {
+                                            expandedCages = if (isExpanded) {
+                                                expandedCages - cage
+                                            } else {
+                                                expandedCages + cage
+                                            }
+                                        },
+                                        onRenameClick = {
+                                            renameDialogInputText = cage
+                                            showRenameDialogForKandang = cage
+                                        },
+                                        onDeleteClick = {
+                                            showDeleteConfirmForKandang = cage
+                                        },
+                                        onAdjustPopulationClick = {
+                                            popDialogInputText = currentPop.toString()
+                                            showPopDialogForKandang = cage
+                                        },
+                                        onUpdatePopulation = onUpdatePopulation
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
-            }
-        } else {
-            // List of Coops
-            LazyColumn(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-                contentPadding = PaddingValues(bottom = 24.dp)
-            ) {
-                items(activeCages, key = { it }) { cage ->
-                    val currentPop = kandangPopulations[cage] ?: 0
-                    val cagePercentage = if (totalFlock > 0) (currentPop.toFloat() / totalFlock) * 100 else 0f
-                    val isExpanded = expandedCages.contains(cage)
-
-                    CageItemCard(
-                        cage = cage,
-                        currentPop = currentPop,
-                        cagePercentage = cagePercentage,
-                        isExpanded = isExpanded,
-                        totalFlock = totalFlock,
-                        logs = logs,
-                        onToggleExpand = {
-                            expandedCages = if (isExpanded) {
-                                expandedCages - cage
-                            } else {
-                                expandedCages + cage
-                            }
-                        },
-                        onRenameClick = {
-                            renameDialogInputText = cage
-                            showRenameDialogForKandang = cage
-                        },
-                        onDeleteClick = {
-                            showDeleteConfirmForKandang = cage
-                        },
-                        onAdjustPopulationClick = {
-                            popDialogInputText = currentPop.toString()
-                            showPopDialogForKandang = cage
-                        },
-                        onUpdatePopulation = onUpdatePopulation
+                1 -> {
+                    VaccinationTab(
+                        vaccinations = vaccinations,
+                        kandangPopulations = kandangPopulations,
+                        onAddVaccination = onAddVaccination,
+                        onUpdateVaccinationStatus = onUpdateVaccinationStatus,
+                        onDeleteVaccination = onDeleteVaccination,
+                        onSeedDefaultProgram = onSeedDefaultProgram
+                    )
+                }
+                2 -> {
+                    BiosecurityTab(
+                        checks = biosecurityChecks,
+                        onSaveCheck = onSaveBiosecurityCheck,
+                        onDeleteCheck = onDeleteBiosecurityCheck
                     )
                 }
             }

@@ -88,6 +88,13 @@ fun MainLayout(viewModel: FarmViewModel = viewModel()) {
     val conflicts by viewModel.conflicts.collectAsStateWithLifecycle()
     val cloudDatabase by viewModel.cloudDatabase.collectAsStateWithLifecycle()
 
+    val useRealServer by viewModel.useRealServer.collectAsStateWithLifecycle()
+    val serverUrl by viewModel.serverUrl.collectAsStateWithLifecycle()
+    val authCookie by viewModel.authCookie.collectAsStateWithLifecycle()
+    val username by viewModel.username.collectAsStateWithLifecycle()
+    val password by viewModel.password.collectAsStateWithLifecycle()
+    val isLoggedIn by viewModel.isLoggedIn.collectAsStateWithLifecycle()
+
     // Form inputs state
     val selectedKandang by viewModel.selectedKandang.collectAsStateWithLifecycle()
     val selectedDate by viewModel.selectedDate.collectAsStateWithLifecycle()
@@ -196,20 +203,13 @@ fun MainLayout(viewModel: FarmViewModel = viewModel()) {
                     NavigationBarItem(
                         selected = selectedTab == 3,
                         onClick = { selectedTab = 3 },
-                        icon = { Icon(Icons.Default.Favorite, contentDescription = "Kesehatan") },
-                        label = { Text("Kesehatan") },
-                        alwaysShowLabel = false
-                    )
-                    NavigationBarItem(
-                        selected = selectedTab == 4,
-                        onClick = { selectedTab = 4 },
                         icon = { Icon(Icons.Default.Calculate, contentDescription = "Simulasi") },
                         label = { Text("Simulasi") },
                         alwaysShowLabel = false
                     )
                     NavigationBarItem(
-                        selected = selectedTab == 5,
-                        onClick = { selectedTab = 5 },
+                        selected = selectedTab == 4,
+                        onClick = { selectedTab = 4 },
                         icon = { Icon(Icons.Default.Assessment, contentDescription = "Laporan") },
                         label = { Text("Laporan") },
                         alwaysShowLabel = false
@@ -235,7 +235,18 @@ fun MainLayout(viewModel: FarmViewModel = viewModel()) {
                     onChangeStrategy = { viewModel.changeSyncStrategy(it) },
                     onTriggerSync = { viewModel.triggerSync() },
                     onResolveConflict = { conflict, keepLocal -> viewModel.resolveConflict(conflict, keepLocal) },
-                    onInjectConflict = { viewModel.injectSimulatedCloudConflict() }
+                    onInjectConflict = { viewModel.injectSimulatedCloudConflict() },
+                    useRealServer = useRealServer,
+                    serverUrl = serverUrl,
+                    authCookie = authCookie,
+                    usernameStr = username,
+                    passwordStr = password,
+                    isLoggedIn = isLoggedIn,
+                    onToggleUseRealServer = { viewModel.setUseRealServer(it) },
+                    onConnectAndLogin = { url, cookie, user, pass ->
+                        viewModel.connectAndLogin(url, cookie, user, pass)
+                    },
+                    onLogout = { viewModel.logout() }
                 )
             } else {
                 when (selectedTab) {
@@ -282,12 +293,9 @@ fun MainLayout(viewModel: FarmViewModel = viewModel()) {
                         onAddKandang = { name, pop -> viewModel.addKandang(name, pop) },
                         onDeleteKandang = { name -> viewModel.deleteKandang(name) },
                         onRenameKandang = { old, new -> viewModel.renameKandang(old, new) },
-                        logs = logs
-                    )
-                    3 -> HealthScreen(
+                        logs = logs,
                         vaccinations = vaccinations,
                         biosecurityChecks = biosecurityChecks,
-                        kandangPopulations = kandangPopulations,
                         onAddVaccination = { kandang, name, date, method, notes ->
                             viewModel.addVaccination(kandang, name, date, method, notes)
                         },
@@ -299,13 +307,13 @@ fun MainLayout(viewModel: FarmViewModel = viewModel()) {
                         onDeleteBiosecurityCheck = { id -> viewModel.deleteBiosecurityCheck(id) },
                         onSeedDefaultProgram = { viewModel.seedDefaultVaccinationProgram() }
                     )
-                    4 -> FeedPlannerScreen(
+                    3 -> FeedPlannerScreen(
                         eggPrice = eggPrice,
                         feedPrice = feedPrice,
                         onUpdateEggPrice = { viewModel.updateEggPrice(it) },
                         onUpdateFeedPrice = { viewModel.updateFeedPrice(it) }
                     )
-                    5 -> ReportsScreen(
+                    4 -> ReportsScreen(
                         logs = logs,
                         eggPrice = eggPrice,
                         feedPrice = feedPrice,

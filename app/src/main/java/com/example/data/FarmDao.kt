@@ -61,4 +61,23 @@ interface FarmDao {
 
     @Query("DELETE FROM biosecurity_checks WHERE id = :id")
     suspend fun deleteBiosecurityCheckById(id: String)
+
+    // Sync Helper Queries
+    @Query("SELECT * FROM layer_farm_logs WHERE lastUpdated > :timestamp")
+    suspend fun getLogsUpdatedAfter(timestamp: Long): List<LayerFarmLog>
+
+    @Query("SELECT * FROM vaccination_schedules WHERE lastUpdated > :timestamp")
+    suspend fun getVaccinationsUpdatedAfter(timestamp: Long): List<VaccinationSchedule>
+
+    @Query("SELECT * FROM biosecurity_checks WHERE timestamp > :timestamp")
+    suspend fun getBiosecurityChecksUpdatedAfter(timestamp: Long): List<BiosecurityCheck>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertLogs(logs: List<LayerFarmLog>)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertVaccinations(vaccinations: List<VaccinationSchedule>)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertBiosecurityChecks(checks: List<BiosecurityCheck>)
 }

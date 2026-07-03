@@ -1,5 +1,6 @@
 package com.example.data
 
+import android.content.Context
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -30,7 +31,38 @@ data class SyncConflict(
     val message: String
 )
 
-class SyncManager(private val repository: FarmRepository) {
+class SyncManager(
+    private val repository: FarmRepository,
+    private val context: Context
+) {
+    private val sharedPrefs = context.getSharedPreferences("sync_prefs", Context.MODE_PRIVATE)
+
+    // Sync Mode configuration
+    private val _useRealServer = MutableStateFlow(sharedPrefs.getBoolean("use_real_server", false))
+    val useRealServer: StateFlow<Boolean> = _useRealServer.asStateFlow()
+
+    private val _serverUrl = MutableStateFlow(
+        sharedPrefs.getString("server_url", "https://ais-dev-pndu4mvv2bfmazfyes5ovk-1023004766485.asia-southeast1.run.app/") ?: ""
+    )
+    val serverUrl: StateFlow<String> = _serverUrl.asStateFlow()
+
+    private val _authCookie = MutableStateFlow(
+        sharedPrefs.getString("auth_cookie", "") ?: ""
+    )
+    val authCookie: StateFlow<String> = _authCookie.asStateFlow()
+
+    private val _username = MutableStateFlow(
+        sharedPrefs.getString("username", "admin") ?: ""
+    )
+    val username: StateFlow<String> = _username.asStateFlow()
+
+    private val _password = MutableStateFlow(
+        sharedPrefs.getString("password", "adminpeternakan") ?: ""
+    )
+    val password: StateFlow<String> = _password.asStateFlow()
+
+    private val _isLoggedIn = MutableStateFlow(false)
+    val isLoggedIn: StateFlow<Boolean> = _isLoggedIn.asStateFlow()
 
     // Simulate Internet Status
     private val _isOnline = MutableStateFlow(true)
@@ -80,6 +112,42 @@ class SyncManager(private val repository: FarmRepository) {
     private val _strategy = MutableStateFlow(ResolutionStrategy.LAST_WRITE_WINS)
     val strategy: StateFlow<ResolutionStrategy> = _strategy.asStateFlow()
 
+    init {
+        // Initialize Retrofit configuration with stored values
+        RetrofitClient.updateConfig(_serverUrl.value, _authCookie.value)
+    }
+
+    fun setUseRealServer(value: Boolean) {
+        _useRealServer.value = value
+        sharedPrefs.edit().putBoolean("use_real_server", value).apply()
+        _syncStatusMessage.value = if (value) "Mode Sinkronisasi Server AKTIF" else "Mode Simulasi AKTIF"
+        RetrofitClient.updateConfig(_serverUrl.value, _authCookie.value)
+    }
+
+    fun setServerUrl(value: String) {
+        _serverUrl.value = value
+        sharedPrefs.edit().putString("server_url", value).apply()
+        RetrofitClient.updateConfig(value, _authCookie.value)
+    }
+
+    fun setAuthCookie(value: String) {
+        _authCookie.value = value
+        sharedPrefs.edit().putString("auth_cookie", value).apply()
+        RetrofitClient.updateConfig(_serverUrl.value, value)
+    }
+
+    fun setCredentials(user: String, pass: String) {
+        _username.value = user
+        _password.value = pass
+        sharedPrefs.edit().putString("username", user).putString("password", pass).apply()
+    }
+
+    fun logout() {
+        RetrofitClient.setToken(null)
+        _isLoggedIn.value = false
+        _syncStatusMessage.value = "Logged out from server."
+    }
+
     fun setOnline(online: Boolean) {
         _isOnline.value = online
         if (!online) {
@@ -94,7 +162,59 @@ class SyncManager(private val repository: FarmRepository) {
         _syncStatusMessage.value = "Strategi konflik diubah: ${strategy.name}"
     }
 
-    // Add mock item to cloud to trigger a conflict or new download
+    private fun getLastSyncTimestamp(): Long {
+        return sharedPrefs.getLong("last_sync_timestamp", 0L)
+    }
+
+    private fun setLastSyncTimestamp(timestamp: Long) {
+        sharedPrefs.edit().putLong("last_sync_timestamp", timestamp).apply()
+    }
+
+    // Attempt to authenticate with backend server
+    suspend fun attemptLogin(): Boolean {
+        if (RetrofitClient.getToken() != null && _isLoggedIn.value) {
+            return true
+        }
+
+        val request = LoginRequest(_username.value, _password.value)
+        val response = RetrofitClient.service.login(request)
+        return if (response.isSuccessful && response.body() != null) {
+            val token = response.body()!!.token
+            RetrofitClient.setToken(token)
+            _isLoggedIn.value = true
+            true
+        } else {
+            _isLoggedIn.value = false
+            false
+        }
+    }
+
+    suspend fun testConnectionAndLogin(): Boolean {
+        _isSyncing.value = true
+        _syncStatusMessage.value = "Menghubungkan & memverifikasi kredensial..."
+        try {
+            // Reset existing token first to test fresh
+            RetrofitClient.setToken(null)
+            _isLoggedIn.value = false
+
+            val success = attemptLogin()
+            if (success) {
+                _syncStatusMessage.value = "Login Sukses! Sesi terverifikasi."
+            } else {
+                _syncStatusMessage.value = "Login Gagal: Username atau Password salah!"
+            }
+            return success
+        } catch (e: Exception) {
+            e.printStackTrace()
+            _syncStatusMessage.value = "Gagal Terhubung ke Server: ${e.localizedMessage ?: "Timeout/Koneksi Bermasalah"}"
+            _isLoggedIn.value = false
+            return false
+        } finally {
+            _isSyncing.value = false
+        }
+    }
+
+    // Add mock item to cloud to trigger a conflict or new download (Simulation only)
     fun injectCloudUpdate(
         id: String,
         kandangName: String,
@@ -115,7 +235,7 @@ class SyncManager(private val repository: FarmRepository) {
                         feedAmount = feedAmount,
                         chickenDead = chickenDead,
                         notes = notes,
-                        lastUpdated = System.currentTimeMillis() // simulated newer modification
+                        lastUpdated = System.currentTimeMillis()
                     )
                 } else it
             }
@@ -138,7 +258,7 @@ class SyncManager(private val repository: FarmRepository) {
 
     /**
      * Core Sync logic.
-     * We simulate background/foreground synchronization.
+     * We support both the Real Backend API sync and Simulated Local Sync.
      */
     suspend fun performSync() {
         if (!_isOnline.value) {
@@ -150,108 +270,169 @@ class SyncManager(private val repository: FarmRepository) {
         _syncStatusMessage.value = "Sinkronisasi sedang berlangsung..."
         _conflicts.value = emptyList()
 
-        // Simulate network latency (very realistic!)
-        kotlinx.coroutines.delay(1200)
+        if (_useRealServer.value) {
+            try {
+                // 1. Authenticate
+                _syncStatusMessage.value = "Melakukan login ke backend server..."
+                val loginSuccess = attemptLogin()
+                if (!loginSuccess) {
+                    _syncStatusMessage.value = "Error: Autentikasi server gagal! Periksa username & password."
+                    _isSyncing.value = false
+                    return
+                }
 
-        val localUnsynced = repository.getUnsyncedLogs()
-        val currentCloud = _cloudDatabase.value.toMutableList()
-        val unresolvedConflicts = mutableListOf<SyncConflict>()
+                _syncStatusMessage.value = "Autentikasi berhasil. Memulai sinkronisasi..."
+                val lastSync = getLastSyncTimestamp()
 
-        // 1. PUSH local changes to Cloud & resolve conflicts
-        for (localLog in localUnsynced) {
-            // Find match by id OR by kandangName + date
-            val remoteMatch = currentCloud.find { it.id == localLog.id || (it.kandangName == localLog.kandangName && it.date == localLog.date) }
+                // --- LANGKAH A: PUSH (Upload Local Changes) ---
+                _syncStatusMessage.value = "Mengunggah data lokal baru/diubah..."
+                val unsyncedLogs = repository.getLogsUpdatedAfter(lastSync)
+                val unsyncedVac = repository.getVaccinationsUpdatedAfter(lastSync)
+                val unsyncedBio = repository.getBiosecurityChecksUpdatedAfter(lastSync)
 
-            if (remoteMatch != null) {
-                // Collision / overlapping update!
-                if (localLog.isIdenticalTo(remoteMatch)) {
-                    // Exactly identical, just mark as synced
-                    repository.markAsSynced(localLog.id, remoteMatch.id)
+                var pushMessage = "Tidak ada data lokal baru untuk diunggah."
+                if (unsyncedLogs.isNotEmpty() || unsyncedVac.isNotEmpty() || unsyncedBio.isNotEmpty()) {
+                    val payload = SyncPushPayload(unsyncedLogs, unsyncedVac, unsyncedBio)
+                    val pushResponse = RetrofitClient.service.pushData(payload)
+                    
+                    if (pushResponse.isSuccessful && pushResponse.body()?.success == true) {
+                        val body = pushResponse.body()!!
+                        // Update local logs to isSynced = true
+                        val syncedIds = body.syncedIds
+                        if (!syncedIds.isNullOrEmpty()) {
+                            for (id in syncedIds) {
+                                repository.markAsSynced(id, id)
+                            }
+                        } else {
+                            // Fallback: mark all pushed logs as synced
+                            for (log in unsyncedLogs) {
+                                repository.markAsSynced(log.id, log.id)
+                            }
+                        }
+                        pushMessage = "Unggah sukses: ${body.message ?: "Selesai"} (${unsyncedLogs.size} log, ${unsyncedVac.size} vak, ${unsyncedBio.size} bio)"
+                    } else {
+                        val errBody = pushResponse.errorBody()?.string()
+                        val code = pushResponse.code()
+                        _syncStatusMessage.value = "Gagal push ke server (HTTP $code): ${errBody ?: pushResponse.message()}"
+                        _isSyncing.value = false
+                        return
+                    }
+                }
+
+                // --- LANGKAH B: PULL (Download Server Changes) ---
+                _syncStatusMessage.value = "Mengunduh data baru dari server..."
+                val pullResponse = RetrofitClient.service.pullData(lastSync)
+                if (pullResponse.isSuccessful && pullResponse.body() != null) {
+                    val serverData = pullResponse.body()!!
+
+                    // Update local Room database
+                    if (serverData.logs.isNotEmpty()) {
+                        // Mark downloaded logs as synced
+                        val syncedServerLogs = serverData.logs.map { it.copy(isSynced = true) }
+                        repository.insertLogs(syncedServerLogs)
+                    }
+                    if (serverData.vaccinations.isNotEmpty()) {
+                        repository.insertVaccinations(serverData.vaccinations)
+                    }
+                    if (serverData.biosecurity.isNotEmpty()) {
+                        repository.insertBiosecurityChecks(serverData.biosecurity)
+                    }
+
+                    // Save server timestamp as the last synced benchmark
+                    setLastSyncTimestamp(serverData.serverTimestamp)
+                    _syncStatusMessage.value = "Sinkronisasi Sukses! $pushMessage | Diunduh: ${serverData.logs.size} log, ${serverData.vaccinations.size} vak, ${serverData.biosecurity.size} bio."
                 } else {
-                    when (_strategy.value) {
-                        ResolutionStrategy.LAST_WRITE_WINS -> {
-                            if (localLog.lastUpdated > remoteMatch.lastUpdated) {
-                                // Local is newer, overwrite cloud
+                    val errBody = pullResponse.errorBody()?.string()
+                    val code = pullResponse.code()
+                    _syncStatusMessage.value = "Gagal pull dari server (HTTP $code): ${errBody ?: pullResponse.message()}"
+                }
+
+            } catch (e: com.squareup.moshi.JsonDataException) {
+                e.printStackTrace()
+                _syncStatusMessage.value = "Gagal Sinkronisasi: Format JSON tidak sesuai (JsonDataException: ${e.localizedMessage})"
+            } catch (e: java.io.IOException) {
+                e.printStackTrace()
+                _syncStatusMessage.value = "Gagal Sinkronisasi: Masalah Koneksi/Timeout (${e.javaClass.simpleName}: ${e.localizedMessage})"
+            } catch (e: Exception) {
+                e.printStackTrace()
+                _syncStatusMessage.value = "Gagal Sinkronisasi: ${e.javaClass.simpleName} - ${e.localizedMessage ?: "Unknown Error"}"
+            } finally {
+                _isSyncing.value = false
+            }
+        } else {
+            // --- SIMULATED SYNC ---
+            kotlinx.coroutines.delay(1200)
+
+            val localUnsynced = repository.getUnsyncedLogs()
+            val currentCloud = _cloudDatabase.value.toMutableList()
+            val unresolvedConflicts = mutableListOf<SyncConflict>()
+
+            for (localLog in localUnsynced) {
+                val remoteMatch = currentCloud.find { it.id == localLog.id || (it.kandangName == localLog.kandangName && it.date == localLog.date) }
+
+                if (remoteMatch != null) {
+                    if (localLog.isIdenticalTo(remoteMatch)) {
+                        repository.markAsSynced(localLog.id, remoteMatch.id)
+                    } else {
+                        when (_strategy.value) {
+                            ResolutionStrategy.LAST_WRITE_WINS -> {
+                                if (localLog.lastUpdated > remoteMatch.lastUpdated) {
+                                    val index = currentCloud.indexOf(remoteMatch)
+                                    currentCloud[index] = remoteMatch.copyFromLocal(localLog)
+                                    repository.markAsSynced(localLog.id, remoteMatch.id)
+                                } else {
+                                    repository.insertOrUpdateFromSync(localLog.copyFromRemote(remoteMatch, isSynced = true))
+                                }
+                            }
+                            ResolutionStrategy.LOCAL_WINS -> {
                                 val index = currentCloud.indexOf(remoteMatch)
                                 currentCloud[index] = remoteMatch.copyFromLocal(localLog)
                                 repository.markAsSynced(localLog.id, remoteMatch.id)
-                            } else {
-                                // Cloud is newer, overwrite local
+                            }
+                            ResolutionStrategy.REMOTE_WINS -> {
                                 repository.insertOrUpdateFromSync(localLog.copyFromRemote(remoteMatch, isSynced = true))
                             }
-                        }
-                        ResolutionStrategy.LOCAL_WINS -> {
-                            // Local wins, update cloud
-                            val index = currentCloud.indexOf(remoteMatch)
-                            currentCloud[index] = remoteMatch.copyFromLocal(localLog)
-                            repository.markAsSynced(localLog.id, remoteMatch.id)
-                        }
-                        ResolutionStrategy.REMOTE_WINS -> {
-                            // Remote wins, update local
-                            repository.insertOrUpdateFromSync(localLog.copyFromRemote(remoteMatch, isSynced = true))
-                        }
-                        ResolutionStrategy.MANUAL -> {
-                            // Let the user choose manually
-                            unresolvedConflicts.add(
-                                SyncConflict(
-                                    localLog = localLog,
-                                    remoteLog = remoteMatch,
-                                    message = "Perbedaan data ${localLog.kandangName} (${localLog.date})"
+                            ResolutionStrategy.MANUAL -> {
+                                unresolvedConflicts.add(
+                                    SyncConflict(
+                                        localLog = localLog,
+                                        remoteLog = remoteMatch,
+                                        message = "Perbedaan data ${localLog.kandangName} (${localLog.date})"
+                                    )
                                 )
-                            )
+                            }
                         }
                     }
+                } else {
+                    val remoteId = localLog.syncId ?: UUID.randomUUID().toString()
+                    currentCloud.add(
+                        RemoteLog(
+                            id = remoteId,
+                            kandangName = localLog.kandangName,
+                            date = localLog.date,
+                            eggCount = localLog.eggCount,
+                            eggWeight = localLog.eggWeight,
+                            feedAmount = localLog.feedAmount,
+                            chickenDead = localLog.chickenDead,
+                            notes = localLog.notes,
+                            lastUpdated = localLog.lastUpdated
+                        )
+                    )
+                    repository.markAsSynced(localLog.id, remoteId)
                 }
-            } else {
-                // No cloud matching record: Simply upload!
-                val remoteId = localLog.syncId ?: UUID.randomUUID().toString()
-                currentCloud.add(
-                    RemoteLog(
-                        id = remoteId,
-                        kandangName = localLog.kandangName,
-                        date = localLog.date,
-                        eggCount = localLog.eggCount,
-                        eggWeight = localLog.eggWeight,
-                        feedAmount = localLog.feedAmount,
-                        chickenDead = localLog.chickenDead,
-                        notes = localLog.notes,
-                        lastUpdated = localLog.lastUpdated
-                    )
-                )
-                repository.markAsSynced(localLog.id, remoteId)
             }
-        }
 
-        // Update Simulated Cloud
-        _cloudDatabase.value = currentCloud
+            _cloudDatabase.value = currentCloud
 
-        // 2. PULL new/updated data from cloud to local
-        val updatedCloud = _cloudDatabase.value
-        for (remoteLog in updatedCloud) {
-            val localLog = repository.getLogByKandangAndDate(remoteLog.kandangName, remoteLog.date)
-            if (localLog == null) {
-                // New record on the server, insert locally
-                repository.insertOrUpdateFromSync(
-                    LayerFarmLog(
-                        id = remoteLog.id,
-                        kandangName = remoteLog.kandangName,
-                        date = remoteLog.date,
-                        eggCount = remoteLog.eggCount,
-                        eggWeight = remoteLog.eggWeight,
-                        feedAmount = remoteLog.feedAmount,
-                        chickenDead = remoteLog.chickenDead,
-                        notes = remoteLog.notes,
-                        isSynced = true,
-                        lastUpdated = remoteLog.lastUpdated,
-                        createdAt = remoteLog.lastUpdated,
-                        syncId = remoteLog.id
-                    )
-                )
-            } else {
-                // Record exists. If local is already synced, and remote is newer, update local.
-                if (localLog.isSynced && remoteLog.lastUpdated > localLog.lastUpdated) {
+            val updatedCloud = _cloudDatabase.value
+            for (remoteLog in updatedCloud) {
+                val localLog = repository.getLogByKandangAndDate(remoteLog.kandangName, remoteLog.date)
+                if (localLog == null) {
                     repository.insertOrUpdateFromSync(
-                        localLog.copy(
+                        LayerFarmLog(
+                            id = remoteLog.id,
+                            kandangName = remoteLog.kandangName,
+                            date = remoteLog.date,
                             eggCount = remoteLog.eggCount,
                             eggWeight = remoteLog.eggWeight,
                             feedAmount = remoteLog.feedAmount,
@@ -259,19 +440,35 @@ class SyncManager(private val repository: FarmRepository) {
                             notes = remoteLog.notes,
                             isSynced = true,
                             lastUpdated = remoteLog.lastUpdated,
+                            createdAt = remoteLog.lastUpdated,
                             syncId = remoteLog.id
                         )
                     )
+                } else {
+                    if (localLog.isSynced && remoteLog.lastUpdated > localLog.lastUpdated) {
+                        repository.insertOrUpdateFromSync(
+                            localLog.copy(
+                                eggCount = remoteLog.eggCount,
+                                eggWeight = remoteLog.eggWeight,
+                                feedAmount = remoteLog.feedAmount,
+                                chickenDead = remoteLog.chickenDead,
+                                notes = remoteLog.notes,
+                                isSynced = true,
+                                lastUpdated = remoteLog.lastUpdated,
+                                syncId = remoteLog.id
+                            )
+                        )
+                    }
                 }
             }
-        }
 
-        _isSyncing.value = false
-        if (unresolvedConflicts.isNotEmpty()) {
-            _conflicts.value = unresolvedConflicts
-            _syncStatusMessage.value = "Menunggu penyelesaian ${unresolvedConflicts.size} konflik manual!"
-        } else {
-            _syncStatusMessage.value = "Sinkronisasi Sukses! Semua data ter-update."
+            _isSyncing.value = false
+            if (unresolvedConflicts.isNotEmpty()) {
+                _conflicts.value = unresolvedConflicts
+                _syncStatusMessage.value = "Menunggu penyelesaian ${unresolvedConflicts.size} konflik manual!"
+            } else {
+                _syncStatusMessage.value = "Sinkronisasi Sukses! Semua data ter-update."
+            }
         }
     }
 
@@ -281,7 +478,6 @@ class SyncManager(private val repository: FarmRepository) {
         val remoteLog = conflict.remoteLog
 
         if (keepLocal) {
-            // Keep Local version: Update the Cloud database and mark local as synced
             val remoteMatch = currentCloud.find { it.id == remoteLog.id }
             if (remoteMatch != null) {
                 val index = currentCloud.indexOf(remoteMatch)
@@ -304,7 +500,6 @@ class SyncManager(private val repository: FarmRepository) {
             repository.markAsSynced(localLog.id, remoteLog.id)
             _syncStatusMessage.value = "Konflik selesai: Mempertahankan Data Lokal."
         } else {
-            // Keep Cloud version: Update Local database from Cloud and mark as synced
             repository.insertOrUpdateFromSync(
                 localLog.copy(
                     eggCount = remoteLog.eggCount,
@@ -320,7 +515,6 @@ class SyncManager(private val repository: FarmRepository) {
             _syncStatusMessage.value = "Konflik selesai: Mempertahankan Data Cloud."
         }
 
-        // Update list of conflicts
         _conflicts.value = _conflicts.value.filterNot { it.localLog.id == localLog.id }
         _cloudDatabase.value = currentCloud
 

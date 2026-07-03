@@ -47,11 +47,13 @@ class FarmRepository(private val farmDao: FarmDao) {
     val allBiosecurityChecks: Flow<List<BiosecurityCheck>> = farmDao.getAllBiosecurityChecks()
 
     suspend fun saveVaccination(schedule: VaccinationSchedule) {
-        farmDao.insertVaccination(schedule)
+        val updated = schedule.copy(lastUpdated = System.currentTimeMillis())
+        farmDao.insertVaccination(updated)
     }
 
     suspend fun updateVaccination(schedule: VaccinationSchedule) {
-        farmDao.updateVaccination(schedule)
+        val updated = schedule.copy(lastUpdated = System.currentTimeMillis())
+        farmDao.updateVaccination(updated)
     }
 
     suspend fun deleteVaccination(id: String) {
@@ -59,7 +61,8 @@ class FarmRepository(private val farmDao: FarmDao) {
     }
 
     suspend fun saveBiosecurityCheck(check: BiosecurityCheck) {
-        farmDao.insertBiosecurityCheck(check)
+        val updated = check.copy(timestamp = System.currentTimeMillis())
+        farmDao.insertBiosecurityCheck(updated)
     }
 
     suspend fun getBiosecurityCheckByDate(date: String): BiosecurityCheck? {
@@ -69,4 +72,23 @@ class FarmRepository(private val farmDao: FarmDao) {
     suspend fun deleteBiosecurityCheck(id: String) {
         farmDao.deleteBiosecurityCheckById(id)
     }
+
+    // Sync helpers
+    suspend fun getLogsUpdatedAfter(timestamp: Long): List<LayerFarmLog> =
+        farmDao.getLogsUpdatedAfter(timestamp)
+
+    suspend fun getVaccinationsUpdatedAfter(timestamp: Long): List<VaccinationSchedule> =
+        farmDao.getVaccinationsUpdatedAfter(timestamp)
+
+    suspend fun getBiosecurityChecksUpdatedAfter(timestamp: Long): List<BiosecurityCheck> =
+        farmDao.getBiosecurityChecksUpdatedAfter(timestamp)
+
+    suspend fun insertLogs(logs: List<LayerFarmLog>) =
+        farmDao.insertLogs(logs)
+
+    suspend fun insertVaccinations(vaccinations: List<VaccinationSchedule>) =
+        farmDao.insertVaccinations(vaccinations)
+
+    suspend fun insertBiosecurityChecks(checks: List<BiosecurityCheck>) =
+        farmDao.insertBiosecurityChecks(checks)
 }

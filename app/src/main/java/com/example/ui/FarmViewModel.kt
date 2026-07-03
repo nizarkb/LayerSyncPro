@@ -27,7 +27,7 @@ class FarmViewModel(application: Application) : AndroidViewModel(application) {
 
     private val database = FarmDatabase.getDatabase(application)
     private val repository = FarmRepository(database.farmDao())
-    val syncManager = SyncManager(repository)
+    val syncManager = SyncManager(repository, application)
 
     // Persistent Theme selection: true = dark theme, false = light theme. Default is false (Light mode).
     private val sharedPrefs = application.getSharedPreferences("farm_prefs", Context.MODE_PRIVATE)
@@ -262,6 +262,29 @@ class FarmViewModel(application: Application) : AndroidViewModel(application) {
     val syncStatusMessage: StateFlow<String> = syncManager.syncStatusMessage
     val currentStrategy: StateFlow<ResolutionStrategy> = syncManager.strategy
     val cloudDatabase = syncManager.cloudDatabase
+
+    // Real server sync states and methods
+    val useRealServer: StateFlow<Boolean> = syncManager.useRealServer
+    val serverUrl: StateFlow<String> = syncManager.serverUrl
+    val authCookie: StateFlow<String> = syncManager.authCookie
+    val username: StateFlow<String> = syncManager.username
+    val password: StateFlow<String> = syncManager.password
+    val isLoggedIn: StateFlow<Boolean> = syncManager.isLoggedIn
+
+    fun setUseRealServer(value: Boolean) = syncManager.setUseRealServer(value)
+    fun setServerUrl(value: String) = syncManager.setServerUrl(value)
+    fun setAuthCookie(value: String) = syncManager.setAuthCookie(value)
+    fun setCredentials(user: String, pass: String) = syncManager.setCredentials(user, pass)
+    fun logout() = syncManager.logout()
+
+    fun connectAndLogin(url: String, cookie: String, user: String, pass: String) {
+        viewModelScope.launch {
+            syncManager.setServerUrl(url)
+            syncManager.setAuthCookie(cookie)
+            syncManager.setCredentials(user, pass)
+            syncManager.testConnectionAndLogin()
+        }
+    }
 
     // State for Data Entry Form
     private val _selectedKandang = MutableStateFlow("Kandang A")
